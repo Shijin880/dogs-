@@ -1,3 +1,78 @@
+image-classifier/
+├── static/          # For static files like HTML, JS, and CSS
+│   ├── index.html
+│   ├── styles.css   # (Optional)
+├── uploads/         # For storing uploaded images
+├── app.py           # Flask backend
+├── requirements.tx
+cd image-classifier
+python -m venv venv
+.\venv\Scripts\activate
+Flask
+tensorflow
+Pillow
+numpy
+pip install -r requirements.txt
+from flask import Flask, request, jsonify, render_template
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.applications.vgg16 import decode_predictions, preprocess_input
+import numpy as np
+import os
+
+app = Flask(__name__)
+
+# Load the pre-trained VGG16 model
+model = VGG16(weights='imagenet')
+
+# Create the upload folder if it doesn't exist
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+@app.route('/')
+def index():
+    return open('static/index.html').read()
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Save and process the image
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    file.save(file_path)
+
+    # Load and preprocess the image
+    img = load_img(file_path, target_size=(224, 224))
+    img_array = img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = preprocess_input(img_array)
+
+    # Predict using VGG16
+    predictions = model.predict(img_array)
+    decoded_predictions = decode_predictions(predictions, top=5)[0]
+
+    # Check if it's a dog
+    is_dog = any(imagenet_id.startswith('n02') for imagenet_id, _, _ in decoded_predictions)
+
+    # Format predictions
+    prediction_data = {
+        'is_dog': is_dog,
+        'top_predictions': [
+            {'rank': i + 1, 'label': label, 'confidence': round(score * 100, 2)}
+            for i, (_, label, score) in enumerate(decoded_predictions)
+        ]
+    }
+
+    return jsonify(prediction_data)
+
+if __name__ == '__main__':
+    app.run(debug=True)
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -88,52 +163,39 @@
                 return;
             }
 
-            // Preview the image
             const reader = new FileReader();
             reader.onload = function (e) {
-                const img = document.getElementById('previewImage');
-                img.src = e.target.result;
-                img.style.display = 'block';
+                document.getElementById('previewImage').src = e.target.result;
+                document.getElementById('previewImage').style.display = 'block';
             };
             reader.readAsDataURL(file);
 
             const formData = new FormData();
             formData.append('file', file);
 
-            try {
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    body: formData,
-                });
+            const response = await fetch('/predict', {
+                method: 'POST',
+                body: formData
+            });
 
-                if (!response.ok) {
-                    throw new Error('Failed to get predictions');
-                }
+            const data = await response.json();
 
-                const data = await response.json();
-
-                // Display whether it's a dog
-                document.getElementById('isDog').textContent = `Is Dog: ${data.is_dog ? 'Yes' : 'No'}`;
-
-                // Display top predictions
-                const tableBody = document.querySelector('#predictionsTable tbody');
-                tableBody.innerHTML = '';
-                data.top_predictions.forEach(prediction => {
-                    const row = `
-                        <tr>
-                            <td>${prediction.rank}</td>
-                            <td>${prediction.label}</td>
-                            <td>${prediction.confidence}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Failed to predict. Please try again.');
-            }
+            document.getElementById('isDog').textContent = `Is Dog: ${data.is_dog ? 'Yes' : 'No'}`;
+            const tableBody = document.querySelector('#predictionsTable tbody');
+            tableBody.innerHTML = '';
+            data.top_predictions.forEach(pred => {
+                tableBody.innerHTML += `
+                    <tr>
+                        <td>${pred.rank}</td>
+                        <td>${pred.label}</td>
+                        <td>${pred.confidence}</td>
+                    </tr>
+                `;
+            });
         }
     </script>
 
 </body>
 </html>
+python app.py
+Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
