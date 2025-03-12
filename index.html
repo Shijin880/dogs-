@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Predictions</title>
+    <title>Image Classifier</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,6 +13,17 @@
         }
         h1 {
             color: #2c3e50;
+        }
+        input[type="file"] {
+            margin-bottom: 20px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            padding: 5px;
+            border-radius: 4px;
         }
         table {
             width: 100%;
@@ -31,14 +42,32 @@
         tr:nth-child(even) {
             background-color: #f2f2f2;
         }
+        button {
+            padding: 10px 20px;
+            background-color: #2c3e50;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #34495e;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Predictions</h1>
-    <p><strong>Is Dog:</strong> Yes</p>
-
-    <table>
+    <h1>Image Classifier</h1>
+    
+    <input type="file" id="fileInput" accept="image/*" />
+    <button onclick="uploadImage()">Upload and Predict</button>
+    
+    <img id="previewImage" style="display:none;" />
+    
+    <h2>Predictions:</h2>
+    <p id="isDog"></p>
+    <table id="predictionsTable">
         <thead>
             <tr>
                 <th>Rank</th>
@@ -46,34 +75,65 @@
                 <th>Confidence (%)</th>
             </tr>
         </thead>
-        <tbody>
-            <tr>
-                <td>1</td>
-                <td>Siberian_husky</td>
-                <td>58.11</td>
-            </tr>
-            <tr>
-                <td>2</td>
-                <td>Eskimo_dog</td>
-                <td>38.43</td>
-            </tr>
-            <tr>
-                <td>3</td>
-                <td>malamute</td>
-                <td>3.22</td>
-            </tr>
-            <tr>
-                <td>4</td>
-                <td>dogsled</td>
-                <td>0.07</td>
-            </tr>
-            <tr>
-                <td>5</td>
-                <td>Norwegian_elkhound</td>
-                <td>0.07</td>
-            </tr>
-        </tbody>
+        <tbody></tbody>
     </table>
+
+    <script>
+        async function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select an image!');
+                return;
+            }
+
+            // Preview the image
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = document.getElementById('previewImage');
+                img.src = e.target.result;
+                img.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get predictions');
+                }
+
+                const data = await response.json();
+
+                // Display whether it's a dog
+                document.getElementById('isDog').textContent = `Is Dog: ${data.is_dog ? 'Yes' : 'No'}`;
+
+                // Display top predictions
+                const tableBody = document.querySelector('#predictionsTable tbody');
+                tableBody.innerHTML = '';
+                data.top_predictions.forEach(prediction => {
+                    const row = `
+                        <tr>
+                            <td>${prediction.rank}</td>
+                            <td>${prediction.label}</td>
+                            <td>${prediction.confidence}</td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
+                });
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to predict. Please try again.');
+            }
+        }
+    </script>
 
 </body>
 </html>
